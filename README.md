@@ -1,36 +1,168 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Basket Factory
 
-## Getting Started
+Thematic basket builder for the **SPAXX + CSP wheel** strategy. Pick a basket, see live prices, and calculate cash-secured put premiums against a 52-week price chart.
 
-First, run the development server:
+## What it does
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **7 pre-built baskets** — Face Computer, Defense, Nuclear, Memory, Energy, Semi Chips, Healthcare
+- Each basket is picks-and-shovels, not logo chasing (own the frame maker, not the glasses brand)
+- **Live quotes** fetched from Yahoo Finance on basket selection
+- **CSP Calculator** — enter cash, strike %, DTE, and IV to get Black-Scholes put premium, contracts, yield, and annualized return
+- **52-week price chart** with strike line, 52W low, computed support levels, and a downside cushion zone
+
+---
+
+## Project structure
+
+```
+basket-factory/
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── quotes/route.ts   # GET /api/quotes?symbols=QCOM,META,...
+│   │   │   └── history/route.ts  # GET /api/history?symbol=QCOM
+│   │   ├── page.tsx              # Main page (client component)
+│   │   ├── layout.tsx            # Root layout + metadata
+│   │   └── globals.css           # Tailwind v4 base styles
+│   ├── components/
+│   │   └── CspChart.tsx          # Recharts 52-week chart with reference lines
+│   └── config/
+│       └── baskets.ts            # Basket + holding definitions (source of truth)
+├── ecosystem.config.js           # PM2 process config
+├── next.config.ts                # Next.js 16 config (Turbopack, partial prefetch)
+└── package.json
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Key files
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**`src/config/baskets.ts`**
+All basket data lives here. Each `Holding` has a `symbol` (display/chart ticker), `putTarget` (liquid US options ticker), `weight`, `role`, and `thesis`. Add or edit baskets here — the UI picks them up automatically.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**`src/app/api/quotes/route.ts`**
+Accepts `?symbols=A,B,C`. Returns `{ [symbol]: { price, change, changePercent } }`. Uses `Promise.allSettled` so a single bad ticker doesn't break the response.
 
-## Learn More
+**`src/app/api/history/route.ts`**
+Accepts `?symbol=X`. Returns 1 year of daily closes plus `fiftyTwoWeekLow`, `fiftyTwoWeekHigh`, and `currentPrice`. Cached for 1 hour via `Cache-Control: public, max-age=3600`.
 
-To learn more about Next.js, take a look at the following resources:
+**`src/components/CspChart.tsx`**
+Self-contained chart component. Fetches its own history, computes support levels from local minima clustered within 2%, falls back to simulated price data if the fetch fails. Exposes `onDataLoaded(data, supportLevels)` so the parent can read 52W metrics without re-fetching.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**`src/app/page.tsx`**
+Single-page client component. Owns all interactive state: basket selection, quotes, CSP inputs, and the history data surfaced from `CspChart`. No server components needed — the page is fully interactive.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## API reference
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### `GET /api/quotes?symbols=QCOM,META`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```json
+{
+  "QCOM": { "price": 174.43, "change": -1.07, "changePercent": -0.61 },
+  "META": { "price": 742.96, "change": 24.29, "changePercent": 3.38 }
+}
+```
+
+Missing or errored symbols are silently omitted.
+
+### `GET /api/history?symbol=QCOM`
+
+```json
+{
+  "symbol": "QCOM",
+  "prices": [
+    { "date": "2025-10-13", "close": 161.78 },
+    { "date": "2026-10-12", "close": 174.43 }
+  ],
+  "fiftyTwoWeekLow": 124.07,
+  "fiftyTwoWeekHigh": 251.02,
+  "currentPrice": 174.43
+}
+```
+
+Cached 1 hour. Returns ~252 trading days.
+
+---
+
+## Development workflow
+
+```bash
+# Install dependencies
+npm install
+
+# Run dev server (port 3001, Turbopack)
+npm run dev -- --port 3001
+
+# Type check
+npx tsc --noEmit
+
+# Lint
+npm run lint
+```
+
+---
+
+## Production with PM2
+
+The app runs under PM2 as `basket-factory` on port 3001.
+
+```bash
+# First deploy: build then start
+npm run deploy          # = npm run build && pm2 start ecosystem.config.js
+
+# Day-to-day
+npm run pm2:restart     # restart after a rebuild
+npm run pm2:reload      # zero-downtime reload
+npm run pm2:stop        # stop
+npm run pm2:logs        # tail logs
+npm run pm2:status      # process table
+
+# Survive reboots
+pm2 save                # write process list to disk
+pm2 startup             # print the systemd/init.d command to run once
+```
+
+After any code change:
+
+```bash
+npm run build && npm run pm2:restart
+```
+
+---
+
+## Adding a basket
+
+Edit `src/config/baskets.ts`. Add a new key to `BASKETS`:
+
+```ts
+"my-basket": {
+  id: "my-basket",
+  name: "My Basket",
+  emoji: "🚀",
+  thesis: "One sentence why.",
+  thesisLong: "Longer explanation.",
+  scenarioTicker: "NVDA",       // used for -30% stress test context
+  holdings: [
+    {
+      symbol: "NVDA",           // TradingView / Yahoo ticker
+      display: "Nvidia",
+      weight: 30,               // must sum to 100 across holdings
+      role: "GPU King",
+      thesis: "AI training monopoly",
+      putTarget: "NVDA",        // liquid US options ticker (may differ for foreign stocks)
+    },
+    // ...
+  ],
+},
+```
+
+The dropdown, holdings table, quote fetch, and CSP calculator all update automatically.
+
+---
+
+## CSP calculator notes
+
+- Premium is estimated via **Black-Scholes** (Abramowitz & Stegun normal CDF approximation)
+- IV is user-supplied — check the options chain for the actual implied vol
+- `putTarget` is the ticker used for both the live quote and the CSP calc; for foreign-listed stocks (e.g. Samsung `005930.KS`) the putTarget is the US OTC ticker (`SSNLF`)
+- Strike % is relative to the live quote price, not a specific options strike
