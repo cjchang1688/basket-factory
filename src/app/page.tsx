@@ -9,8 +9,40 @@ import {
 } from "@/config/baskets";
 import { CspChart, type HistoryData } from "@/components/CspChart";
 
-type QuoteData = { price: number; change: number; changePercent: number };
+type QuoteData = {
+  price: number;
+  change: number;
+  changePercent: number;
+  high52w: number;
+  low52w: number;
+  ytdBase: number;
+};
 type Quotes = Record<string, QuoteData>;
+
+// Module-level 5-minute cache — survives re-renders, cleared on 60s refresh
+const quoteCache = new Map<string, { data: QuoteData; ts: number }>();
+const CACHE_TTL = 5 * 60 * 1000;
+
+async function fetchQuotes(symbols: string[]): Promise<Quotes> {
+  const now = Date.now();
+  const stale = symbols.filter((s) => {
+    const c = quoteCache.get(s);
+    return !c || now - c.ts > CACHE_TTL;
+  });
+  if (stale.length > 0) {
+    const res = await fetch(`/api/quotes?symbols=${stale.join(",")}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const fresh: Quotes = await res.json();
+    for (const [sym, d] of Object.entries(fresh)) {
+      quoteCache.set(sym, { data: d, ts: now });
+    }
+  }
+  return Object.fromEntries(
+    symbols
+      .map((s) => [s, quoteCache.get(s)?.data] as const)
+      .filter((entry): entry is [string, QuoteData] => entry[1] != null)
+  );
+}
 
 // Abramowitz & Stegun normal CDF approximation
 function normalCDF(x: number): number {
@@ -118,6 +150,14 @@ function ResultRow({
   );
 }
 
+function Skeleton({ w = "w-14" }: { w?: string }) {
+  return (
+    <span
+      className={`inline-block align-middle ${w} h-3 rounded bg-zinc-700/80 animate-pulse`}
+    />
+  );
+}
+
 function HoldingRow({
   holding,
   quote,
@@ -125,12 +165,25 @@ function HoldingRow({
   holding: Holding;
   quote: QuoteData | undefined;
 }) {
-  const pctColor =
+  const dayColor =
     quote == null
-      ? "text-zinc-600"
+      ? ""
       : quote.changePercent >= 0
       ? "text-emerald-400"
       : "text-red-400";
+
+  const ytdPct =
+    quote && quote.ytdBase > 0
+      ? ((quote.price - quote.ytdBase) / quote.ytdBase) * 100
+      : null;
+  const offHigh =
+    quote && quote.high52w > 0
+      ? ((quote.price - quote.high52w) / quote.high52w) * 100
+      : null;
+  const upFromLow =
+    quote && quote.low52w > 0
+      ? ((quote.price - quote.low52w) / quote.low52w) * 100
+      : null;
 
   return (
     <tr className="border-b border-zinc-800/50 hover:bg-zinc-900/40">
@@ -152,10 +205,19 @@ function HoldingRow({
         {holding.thesis}
       </td>
       <td className="py-3 pr-4 text-right font-mono text-sm">
-        {quote ? fmtUsd(quote.price) : <span className="text-zinc-600">—</span>}
+        {quote ? fmtUsd(quote.price) : <Skeleton w="w-16" />}
       </td>
-      <td className={`py-3 text-right font-mono text-xs ${pctColor}`}>
-        {quote ? fmtPct(quote.changePercent) : "—"}
+      <td className={`py-3 pr-4 text-right font-mono text-xs ${dayColor}`}>
+        {quote ? fmtPct(quote.changePercent) : <Skeleton />}
+      </td>
+      <td className={`py-3 pr-4 text-right font-mono text-xs ${ytdPct == null ? "" : ytdPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+        {ytdPct != null ? fmtPct(ytdPct) : <Skeleton />}
+      </td>
+      <td className={`py-3 pr-4 text-right font-mono text-xs ${offHigh != null ? "text-red-400" : ""}`}>
+        {offHigh != null ? fmtPct(offHigh) : <Skeleton />}
+      </td>
+      <td className={`py-3 text-right font-mono text-xs ${upFromLow != null ? "text-emerald-400" : ""}`}>
+        {upFromLow != null ? fmtPct(upFromLow) : <Skeleton />}
       </td>
     </tr>
   );
@@ -191,29 +253,48 @@ export default function Home() {
   const basket = BASKETS[basketId];
 
   useEffect(() => {
-    const symbols = [
-      ...new Set(basket.holdings.map((h) => h.putTarget)),
-    ].join(",");
-    setLoading(true);
-    setQuoteError(null);
+    const symbols = [...new Set(basket.holdings.map((h) => h.putTarget))];
+
+    // Reset CSP state on basket switch
     setStrikePriceStr("0");
     setPremiumStr("0");
-    fetch(`/api/quotes?symbols=${symbols}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<Quotes>;
-      })
-      .then((data) => {
-        setQuotes(data);
-        setLoading(false);
-      })
-      .catch((e: Error) => {
-        setQuoteError(e.message);
-        setLoading(false);
-      });
     setCspSymbol(basket.holdings[0]?.putTarget ?? "");
     setHistoryData(null);
     setSupportLevels([]);
+
+    let cancelled = false;
+
+    const doFetch = (showSkeleton: boolean) => {
+      if (showSkeleton) {
+        setLoading(true);
+        setQuotes({});
+      }
+      setQuoteError(null);
+      fetchQuotes(symbols)
+        .then((data) => {
+          if (cancelled) return;
+          setQuotes(data);
+          setLoading(false);
+        })
+        .catch((e: Error) => {
+          if (cancelled) return;
+          setQuoteError(e.message);
+          setLoading(false);
+        });
+    };
+
+    doFetch(true);
+
+    // Background refresh every 60s — invalidates cache, no skeleton flash
+    const timer = setInterval(() => {
+      symbols.forEach((s) => quoteCache.delete(s));
+      doFetch(false);
+    }, 60_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [basketId]);
 
   // Auto-set strike to 90% of price when symbol or quotes change
@@ -332,6 +413,15 @@ export default function Home() {
                   </th>
                   <th className="px-4 py-3 text-xs font-medium text-right">
                     Day
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium text-right">
+                    YTD %
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium text-right whitespace-nowrap">
+                    % off 52W High
+                  </th>
+                  <th className="px-4 py-3 text-xs font-medium text-right whitespace-nowrap">
+                    % up from 52W Low
                   </th>
                 </tr>
               </thead>
