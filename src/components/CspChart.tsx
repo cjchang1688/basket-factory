@@ -31,6 +31,24 @@ export type CspChartProps = {
   onDataLoaded?: (data: HistoryData, supports: number[]) => void;
 };
 
+type SupportZone = { min: number; max: number; count: number };
+
+// Merge support levels that are within 5% of each other (by price ratio) into zones
+function groupSupportZones(levels: number[]): SupportZone[] {
+  const sorted = [...levels].sort((a, b) => a - b);
+  const zones: SupportZone[] = [];
+  for (const lvl of sorted) {
+    const last = zones[zones.length - 1];
+    if (last && (lvl - last.max) / lvl < 0.05) {
+      last.max = lvl;
+      last.count++;
+    } else {
+      zones.push({ min: lvl, max: lvl, count: 1 });
+    }
+  }
+  return zones;
+}
+
 // Find local minima, cluster within 2%, return up to 3 most recent levels
 function getSupportLevels(prices: number[]): number[] {
   const minima: Array<{ price: number; idx: number }> = [];
@@ -111,6 +129,54 @@ function CustomTooltip({
         </p>
       )}
     </div>
+  );
+}
+
+function SupportLabel({
+  viewBox,
+  value,
+  side,
+}: {
+  viewBox?: { x: number; y: number; width: number; height: number };
+  value?: string;
+  side?: "left" | "right";
+}) {
+  if (!viewBox || !value) return null;
+  const { x, y, width } = viewBox;
+  const isRight = side === "right";
+  const charW = 6.2;
+  const padH = 5;
+  const textW = value.length * charW;
+  const boxW = textW + padH * 2;
+  const boxH = 15;
+  const textX = isRight ? x + width - 8 : x + 8;
+  const boxX = isRight ? textX - textW - padH : textX - padH;
+
+  return (
+    <g>
+      <rect
+        x={boxX}
+        y={y - boxH / 2}
+        width={boxW}
+        height={boxH}
+        rx={3}
+        fill="#18181b"
+        fillOpacity={0.92}
+        stroke="#3b82f6"
+        strokeWidth={0.5}
+        strokeOpacity={0.5}
+      />
+      <text
+        x={textX}
+        y={y + 4}
+        fill="#60a5fa"
+        fontSize={10}
+        textAnchor={isRight ? "end" : "start"}
+        fontFamily="ui-monospace, monospace"
+      >
+        {value}
+      </text>
+    </g>
   );
 }
 
@@ -271,22 +337,46 @@ export function CspChart({
               }}
             />
 
-            {/* Support levels */}
-            {supports.map((level, i) => (
-              <ReferenceLine
-                key={`sup-${i}`}
-                y={level}
-                stroke="#3b82f6"
-                strokeDasharray="3 3"
-                strokeWidth={1}
-                label={{
-                  value: `Support $${level.toFixed(0)}`,
-                  position: i % 2 === 0 ? "insideTopLeft" : "insideBottomLeft",
-                  fill: "#3b82f6",
-                  fontSize: 10,
-                }}
-              />
-            ))}
+            {/* Support levels — clustered into zones to prevent label overlap */}
+            {groupSupportZones(supports).flatMap((zone, i) => {
+              const side = i % 2 === 0 ? "left" : "right";
+              if (zone.count === 1) {
+                return [
+                  <ReferenceLine
+                    key={`sup-${i}`}
+                    y={zone.min}
+                    stroke="#3b82f6"
+                    strokeDasharray="3 3"
+                    strokeWidth={1}
+                    label={<SupportLabel value={`Support $${zone.min.toFixed(0)}`} side={side} />}
+                  />,
+                ];
+              }
+              return [
+                <ReferenceArea
+                  key={`zone-area-${i}`}
+                  y1={zone.min}
+                  y2={zone.max}
+                  fill="#3b82f6"
+                  fillOpacity={0.08}
+                  stroke="#3b82f6"
+                  strokeOpacity={0.25}
+                  strokeDasharray="3 3"
+                  strokeWidth={1}
+                />,
+                <ReferenceLine
+                  key={`zone-label-${i}`}
+                  y={(zone.min + zone.max) / 2}
+                  stroke="none"
+                  label={
+                    <SupportLabel
+                      value={`Zone $${zone.min.toFixed(0)}–$${zone.max.toFixed(0)}`}
+                      side={side}
+                    />
+                  }
+                />,
+              ];
+            })}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
