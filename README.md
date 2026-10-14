@@ -93,11 +93,15 @@ npm install
 # Run dev server (port 3001, Turbopack)
 npm run dev -- --port 3001
 
+# production build
+npm run build
+npm start
+
 # Type check
 npx tsc --noEmit
 
 # Lint
-npm run lint
+#npm run lint
 ```
 
 ---

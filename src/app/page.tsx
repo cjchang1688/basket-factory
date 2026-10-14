@@ -44,6 +44,13 @@ function bsPut(
   return K * Math.exp(-r * T) * normalCDF(-d2) - S * normalCDF(-d1);
 }
 
+function toLocalDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 const fmt = (n: number, d = 2) =>
   n.toLocaleString("en-US", {
     minimumFractionDigits: d,
@@ -133,7 +140,9 @@ export default function Home() {
   const [cspSymbol, setCspSymbol] = useState<string>("");
   const [cash, setCash] = useState(10000);
   const [strikePct, setStrikePct] = useState(90);
-  const [dte, setDte] = useState(30);
+  const [expirationDate, setExpirationDate] = useState<string>("");
+  const [dte, setDte] = useState<number>(30);
+  const [minDate, setMinDate] = useState<string>("");
   const [iv, setIv] = useState(30);
 
   // History data surfaced from CspChart via onDataLoaded
@@ -171,6 +180,29 @@ export default function Home() {
     setHistoryData(null);
     setSupportLevels([]);
   }, [cspSymbol]);
+
+  // Initialize expiration date and minDate on mount (must be client-side only)
+  useEffect(() => {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    const tom = new Date(t);
+    tom.setDate(tom.getDate() + 1);
+    setMinDate(toLocalDateString(tom));
+    const d = new Date(t);
+    d.setDate(d.getDate() + 30);
+    const initialDate = toLocalDateString(d);
+    setExpirationDate(initialDate);
+    setDte(30);
+  }, []);
+
+  // Recompute DTE whenever expiration date changes
+  useEffect(() => {
+    if (!expirationDate) return;
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    const exp = new Date(expirationDate + "T00:00:00");
+    setDte(Math.max(1, Math.ceil((exp.getTime() - t.getTime()) / 86400000)));
+  }, [expirationDate]);
 
   // CSP math
   const stockPrice = cspSymbol ? (quotes[cspSymbol]?.price ?? 0) : 0;
@@ -273,7 +305,7 @@ export default function Home() {
             Cash-secured put — estimated premium via Black-Scholes
           </p>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             <div>
               <label className="text-xs text-zinc-400 block mb-1.5">
                 Holding
@@ -318,31 +350,31 @@ export default function Home() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs text-zinc-400 block mb-1.5">
-                  DTE
-                </label>
-                <input
-                  type="number"
-                  value={dte}
-                  min={1}
-                  onChange={(e) => setDte(Number(e.target.value))}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-zinc-400 block mb-1.5">
-                  IV %
-                </label>
-                <input
-                  type="number"
-                  value={iv}
-                  min={1}
-                  onChange={(e) => setIv(Number(e.target.value))}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1.5">
+                Expiration Date
+              </label>
+              <input
+                type="date"
+                value={expirationDate}
+                min={minDate}
+                onChange={(e) => setExpirationDate(e.target.value)}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 [color-scheme:dark]"
+              />
+              <p className="text-xs text-zinc-500 mt-1">{dte} days</p>
+            </div>
+
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1.5">
+                IV %
+              </label>
+              <input
+                type="number"
+                value={iv}
+                min={1}
+                onChange={(e) => setIv(Number(e.target.value))}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
             </div>
           </div>
 

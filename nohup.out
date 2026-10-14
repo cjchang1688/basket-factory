@@ -1,0 +1,53 @@
+
+> basket-factory@0.1.0 start
+> next start
+
+⨯ Failed to start server
+Error: listen EADDRINUSE: address already in use :::3000
+    at new Promise (<anonymous>) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 3000
+}
+
+> basket-factory@0.1.0 start
+> next start -p 8888
+
+▲ Next.js 16.4.0
+- Local:         http://localhost:8888
+- Network:       http://10.255.255.254:8888
+✓ Ready in 127ms
+✓ Running next.config.ts took 107ms
+Please consider completing the survey at https://bit.ly/yahoo-finance-api-feedback if you haven't already; for more info see https://github.com/gadicc/yahoo-finance2/issues/764#issuecomment-2056623851.  This will only be shown once, but you can suppress this message in future with `new YahooFinance({ suppressNotices: ['yahooSurvey'] })`.
+[Deprecated] historical() relies on an API that Yahoo have removed.  We'll map this request to chart() for convenience, but, please consider using chart() directly instead; for more info see https://github.com/gadicc/yahoo-finance2/issues/795.  This will only be shown once, but you can suppress this message in future with `new YahooFinance({ suppressNotices: ['ripHistorical'] })`.
+Please consider completing the survey at https://bit.ly/yahoo-finance-api-feedback if you haven't already; for more info see https://github.com/gadicc/yahoo-finance2/issues/764#issuecomment-2056623851.  This will only be shown once, but you can suppress this message in future with `new YahooFinance({ suppressNotices: ['yahooSurvey'] })`.
+2 {
+  date: 2026-10-13T13:30:00.000Z,
+  high: 228.63999938964844,
+  volume: 83671511,
+  open: 224.27000427246094,
+  low: 223.06019592285156,
+  close: null,
+  adjclose: null
+}
+2 {
+  date: 2026-10-13T13:30:00.000Z,
+  high: 228.63999938964844,
+  volume: 83671511,
+  open: 224.27000427246094,
+  low: 223.06019592285156,
+  close: null,
+  adjclose: null
+}
+2 {
+  date: 2026-10-13T13:30:00.000Z,
+  high: 228.63999938964844,
+  volume: 83671511,
+  open: 224.27000427246094,
+  low: 223.06019592285156,
+  close: null,
+  adjclose: null
+}
+Killed
