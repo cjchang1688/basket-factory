@@ -141,6 +141,23 @@ export const BASKETS: Record<string, Basket> = {
       { symbol: "XLV", display: "Healthcare ETF", weight: 20, role: "Diversifier", thesis: "Covers JNJ, MRK, PFE tail", putTarget: "XLV" },
     ],
   },
+
+  "oil-refiner": {
+    id: "oil-refiner",
+    name: "Oil Refiner",
+    emoji: "🛢️",
+    thesis: "Refiners print money on crack spreads. Own the margin, not the barrel.",
+    thesisLong: "Independent refiners earn on the spread between crude input cost and finished product prices — not on crude itself. When supply is tight and product demand is firm, crack spreads widen and these companies generate exceptional cash flow. US refining capacity is structurally limited after post-COVID closures, creating a durable margin floor.",
+    scenarioTicker: "MPC",
+    holdings: [
+      { symbol: "MPC", display: "Marathon Petroleum", weight: 25, role: "Largest Refiner", thesis: "Largest US refiner, crack spread leverage", putTarget: "MPC" },
+      { symbol: "VLO", display: "Valero Energy", weight: 20, role: "Top Refiner", thesis: "Best-in-class refinery complexity, low-cost operator", putTarget: "VLO" },
+      { symbol: "PSX", display: "Phillips 66", weight: 15, role: "Diversified", thesis: "Refining + midstream + chemicals diversification", putTarget: "PSX" },
+      { symbol: "DINO", display: "HF Sinclair", weight: 15, role: "Mid-Continent", thesis: "Rocky Mountain + Southwest refining footprint", putTarget: "DINO" },
+      { symbol: "PBF", display: "PBF Energy", weight: 15, role: "East Coast", thesis: "East Coast leverage, high beta to cracks", putTarget: "PBF" },
+      { symbol: "DK", display: "Delek US", weight: 10, role: "Small Cap", thesis: "Small cap refiner, Permian logistics upside", putTarget: "DK" },
+    ],
+  },
 };
 
 export const BASKET_IDS = Object.keys(BASKETS) as (keyof typeof BASKETS)[];

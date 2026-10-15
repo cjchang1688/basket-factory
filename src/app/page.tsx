@@ -100,32 +100,6 @@ const fmtUsd = (n: number) => "$" + fmt(n);
 
 const fmtPct = (n: number) => (n >= 0 ? "+" : "") + fmt(n) + "%";
 
-function Stat({
-  label,
-  value,
-  sub,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div className="bg-zinc-800/60 rounded-lg p-3">
-      <p className="text-xs text-zinc-400 mb-1">{label}</p>
-      <p
-        className={`text-base font-mono font-semibold ${
-          highlight ? "text-emerald-400" : "text-zinc-100"
-        }`}
-      >
-        {value}
-      </p>
-      {sub && <p className="text-xs text-zinc-500 mt-0.5">{sub}</p>}
-    </div>
-  );
-}
-
 function ResultRow({
   label,
   value,
@@ -223,42 +197,47 @@ function HoldingRow({
   );
 }
 
+// CSP form — completely isolated from basket live-data refresh cycle
+type CspForm = {
+  holding: string;
+  stockPrice: number; // persists across basket refreshes; updated on holding change
+  strike: string;
+  contracts: string;
+  premium: string;
+  spaxx: string;
+};
+
+const CSP_DEFAULTS: Omit<CspForm, "holding" | "stockPrice"> = {
+  strike: "0",
+  contracts: "1",
+  premium: "0",
+  spaxx: "4.96",
+};
+
 export default function Home() {
   const [basketId, setBasketId] = useState(DEFAULT_BASKET_ID);
   const [quotes, setQuotes] = useState<Quotes>({});
   const [loading, setLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
 
-  // CSP calc inputs — stored as strings to prevent React's reconciliation bail-out
-  // when a number parses identically (e.g. "06.90" → 6.9 === 6.9, no re-render).
-  // Derived numbers are computed below for all math.
-  const [cspSymbol, setCspSymbol] = useState<string>("");
-  const [strikePriceStr, setStrikePriceStr] = useState<string>("0");
-  const [numContractsStr, setNumContractsStr] = useState<string>("1");
+  const [cspForm, setCspForm] = useState<CspForm>({
+    holding: "",
+    stockPrice: 0,
+    ...CSP_DEFAULTS,
+  });
   const [expirationDate, setExpirationDate] = useState<string>("");
   const [dte, setDte] = useState<number>(30);
   const [minDate, setMinDate] = useState<string>("");
-  const [premiumStr, setPremiumStr] = useState<string>("0");
-  const [spaxxStr, setSpaxxStr] = useState<string>("4.96");
-
-  const strikePrice = parseFloat(strikePriceStr) || 0;
-  const numContracts = Math.max(1, parseInt(numContractsStr, 10) || 1);
-  const premium = parseFloat(premiumStr) || 0;
-  const spaxx = parseFloat(spaxxStr) || 0;
-
-  // History data surfaced from CspChart via onDataLoaded
   const [historyData, setHistoryData] = useState<HistoryData | null>(null);
   const [supportLevels, setSupportLevels] = useState<number[]>([]);
 
   const basket = BASKETS[basketId];
 
+  // Basket switch: fetch all holdings, set initial CSP state on first load only
   useEffect(() => {
     const symbols = [...new Set(basket.holdings.map((h) => h.putTarget))];
+    const firstTicker = basket.holdings[0]?.putTarget ?? "";
 
-    // Reset CSP state on basket switch
-    setStrikePriceStr("0");
-    setPremiumStr("0");
-    setCspSymbol(basket.holdings[0]?.putTarget ?? "");
     setHistoryData(null);
     setSupportLevels([]);
 
@@ -268,6 +247,8 @@ export default function Home() {
       if (showSkeleton) {
         setLoading(true);
         setQuotes({});
+        // Reset CSP form immediately so stale values don't flash
+        setCspForm({ holding: firstTicker, stockPrice: 0, ...CSP_DEFAULTS });
       }
       setQuoteError(null);
       fetchQuotes(symbols)
@@ -275,6 +256,15 @@ export default function Home() {
           if (cancelled) return;
           setQuotes(data);
           setLoading(false);
+          // Auto-set CSP stock price + 90% strike — only on basket switch, never on refresh
+          if (showSkeleton) {
+            const price = data[firstTicker]?.price ?? 0;
+            setCspForm((f) => ({
+              ...f,
+              stockPrice: price,
+              strike: price > 0 ? String(Math.round(price * 0.9 * 2) / 2) : "0",
+            }));
+          }
         })
         .catch((e: Error) => {
           if (cancelled) return;
@@ -285,7 +275,7 @@ export default function Home() {
 
     doFetch(true);
 
-    // Background refresh every 60s — invalidates cache, no skeleton flash
+    // Background refresh every 60s — invalidates cache, no skeleton flash, no strike reset
     const timer = setInterval(() => {
       symbols.forEach((s) => quoteCache.delete(s));
       doFetch(false);
@@ -295,18 +285,21 @@ export default function Home() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [basketId]);
+  }, [basketId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-set strike to 90% of price when symbol or quotes change
-  useEffect(() => {
-    const price = quotes[cspSymbol]?.price;
-    if (price && price > 0) {
-      setStrikePriceStr(String(Math.round(price * 0.9 * 2) / 2));
-      setPremiumStr("0");
-    }
+  // Holding change in CSP: read price from cache (always pre-fetched by basket load),
+  // update stockPrice in form, clear chart — never touch strike or other inputs
+  const onCspHoldingChange = (ticker: string) => {
     setHistoryData(null);
     setSupportLevels([]);
-  }, [cspSymbol, quotes]);
+    const cachedPrice = quoteCache.get(ticker)?.data.price;
+    setCspForm((f) => ({
+      ...f,
+      holding: ticker,
+      // Keep last known price if cache miss (shouldn't happen for basket tickers)
+      stockPrice: cachedPrice ?? f.stockPrice,
+    }));
+  };
 
   // Initialize expiration date and minDate on mount (must be client-side only)
   useEffect(() => {
@@ -317,8 +310,7 @@ export default function Home() {
     setMinDate(toLocalDateString(tom));
     const d = new Date(t);
     d.setDate(d.getDate() + 30);
-    const initialDate = toLocalDateString(d);
-    setExpirationDate(initialDate);
+    setExpirationDate(toLocalDateString(d));
     setDte(30);
   }, []);
 
@@ -331,8 +323,15 @@ export default function Home() {
     setDte(Math.max(1, Math.ceil((exp.getTime() - t.getTime()) / 86400000)));
   }, [expirationDate]);
 
-  // CSP math (derived)
-  const stockPrice = cspSymbol ? (quotes[cspSymbol]?.price ?? 0) : 0;
+  // CSP derived values
+  const strikePrice = parseFloat(cspForm.strike) || 0;
+  const numContracts = Math.max(1, parseInt(cspForm.contracts, 10) || 1);
+  const premium = parseFloat(cspForm.premium) || 0;
+  const spaxx = parseFloat(cspForm.spaxx) || 0;
+  // Live quotes take precedence; fall back to form's last-fetched price so the
+  // field never goes blank during a background basket refresh (setQuotes({}) path)
+  const stockPrice = quotes[cspForm.holding]?.price || cspForm.stockPrice;
+
   const cashNeeded = strikePrice > 0 ? strikePrice * 100 * numContracts : 0;
   const totalPremiumAmt = premium * 100 * numContracts;
   const breakeven = strikePrice > 0 ? strikePrice - premium : 0;
@@ -452,8 +451,8 @@ export default function Home() {
                 <div>
                   <label className="text-xs text-zinc-400 block mb-1.5">Holding</label>
                   <select
-                    value={cspSymbol}
-                    onChange={(e) => setCspSymbol(e.target.value)}
+                    value={cspForm.holding}
+                    onChange={(e) => onCspHoldingChange(e.target.value)}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
                     {basket.holdings.map((h) => (
@@ -467,12 +466,12 @@ export default function Home() {
                 <div>
                   <label className="text-xs text-zinc-400 block mb-1.5">Stock Price</label>
                   <div className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-lg px-3 py-2 text-sm font-mono text-zinc-300 min-h-[38px] flex items-center">
-                    {loading ? (
-                      <span className="text-zinc-600 animate-pulse">Loading…</span>
+                    {loading && stockPrice === 0 ? (
+                      <Skeleton w="w-20" />
                     ) : stockPrice > 0 ? (
                       fmtUsd(stockPrice)
                     ) : (
-                      <span className="text-zinc-600">—</span>
+                      <Skeleton w="w-20" />
                     )}
                   </div>
                 </div>
@@ -481,11 +480,19 @@ export default function Home() {
                   <label className="text-xs text-zinc-400 block mb-1.5">Strike Price</label>
                   <input
                     type="number"
-                    value={strikePriceStr}
+                    inputMode="decimal"
+                    value={cspForm.strike}
                     min={0}
                     step={0.5}
-                    onChange={(e) => setStrikePriceStr(e.target.value)}
-                    onBlur={(e) => setStrikePriceStr(String(parseFloat(e.target.value) || 0))}
+                    onChange={(e) =>
+                      setCspForm((f) => ({ ...f, strike: e.target.value }))
+                    }
+                    onBlur={(e) =>
+                      setCspForm((f) => ({
+                        ...f,
+                        strike: String(parseFloat(e.target.value) || 0),
+                      }))
+                    }
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -494,11 +501,19 @@ export default function Home() {
                   <label className="text-xs text-zinc-400 block mb-1.5"># Contracts</label>
                   <input
                     type="number"
-                    value={numContractsStr}
+                    inputMode="numeric"
+                    value={cspForm.contracts}
                     min={1}
                     step={1}
-                    onChange={(e) => setNumContractsStr(e.target.value)}
-                    onBlur={(e) => setNumContractsStr(String(Math.max(1, parseInt(e.target.value, 10) || 1)))}
+                    onChange={(e) =>
+                      setCspForm((f) => ({ ...f, contracts: e.target.value }))
+                    }
+                    onBlur={(e) =>
+                      setCspForm((f) => ({
+                        ...f,
+                        contracts: String(Math.max(1, parseInt(e.target.value, 10) || 1)),
+                      }))
+                    }
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -519,11 +534,19 @@ export default function Home() {
                   <label className="text-xs text-zinc-400 block mb-1.5">Premium / share ($)</label>
                   <input
                     type="number"
-                    value={premiumStr}
+                    inputMode="decimal"
+                    value={cspForm.premium}
                     min={0}
                     step={0.01}
-                    onChange={(e) => setPremiumStr(e.target.value)}
-                    onBlur={(e) => setPremiumStr((parseFloat(e.target.value) || 0).toFixed(2))}
+                    onChange={(e) =>
+                      setCspForm((f) => ({ ...f, premium: e.target.value }))
+                    }
+                    onBlur={(e) =>
+                      setCspForm((f) => ({
+                        ...f,
+                        premium: (parseFloat(e.target.value) || 0).toFixed(2),
+                      }))
+                    }
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -532,11 +555,19 @@ export default function Home() {
                   <label className="text-xs text-zinc-400 block mb-1.5">SPAXX rate (%)</label>
                   <input
                     type="number"
-                    value={spaxxStr}
+                    inputMode="decimal"
+                    value={cspForm.spaxx}
                     min={0}
                     step={0.1}
-                    onChange={(e) => setSpaxxStr(e.target.value)}
-                    onBlur={(e) => setSpaxxStr(String(parseFloat(e.target.value) || 0))}
+                    onChange={(e) =>
+                      setCspForm((f) => ({ ...f, spaxx: e.target.value }))
+                    }
+                    onBlur={(e) =>
+                      setCspForm((f) => ({
+                        ...f,
+                        spaxx: String(parseFloat(e.target.value) || 0),
+                      }))
+                    }
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -567,7 +598,7 @@ export default function Home() {
             <>
               <div className="mt-6">
                 <CspChart
-                  symbol={cspSymbol}
+                  symbol={cspForm.holding}
                   currentPrice={stockPrice}
                   strikePrice={strikePrice}
                   onDataLoaded={(d, s) => {
