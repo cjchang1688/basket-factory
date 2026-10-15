@@ -139,30 +139,43 @@ function HoldingRow({
   holding: Holding;
   quote: QuoteData | undefined;
 }) {
+  const effectiveQuote = quote && (holding.override52wHigh != null || holding.override52wLow != null)
+    ? {
+        ...quote,
+        high52w: holding.override52wHigh ?? quote.high52w,
+        low52w: holding.override52wLow ?? quote.low52w,
+      }
+    : quote;
+
   const dayColor =
-    quote == null
+    effectiveQuote == null
       ? ""
-      : quote.changePercent >= 0
+      : effectiveQuote.changePercent >= 0
       ? "text-emerald-400"
       : "text-red-400";
 
   const ytdPct =
-    quote && quote.ytdBase > 0
-      ? ((quote.price - quote.ytdBase) / quote.ytdBase) * 100
+    effectiveQuote && effectiveQuote.ytdBase > 0
+      ? ((effectiveQuote.price - effectiveQuote.ytdBase) / effectiveQuote.ytdBase) * 100
       : null;
   const offHigh =
-    quote && quote.high52w > 0
-      ? ((quote.price - quote.high52w) / quote.high52w) * 100
+    effectiveQuote && effectiveQuote.high52w > 0
+      ? ((effectiveQuote.price - effectiveQuote.high52w) / effectiveQuote.high52w) * 100
       : null;
   const upFromLow =
-    quote && quote.low52w > 0
-      ? ((quote.price - quote.low52w) / quote.low52w) * 100
+    effectiveQuote && effectiveQuote.low52w > 0
+      ? ((effectiveQuote.price - effectiveQuote.low52w) / effectiveQuote.low52w) * 100
       : null;
+
+  const tickerDisplay = holding.tickerLabel ?? holding.putTarget;
 
   return (
     <tr className="border-b border-zinc-800/50 hover:bg-zinc-900/40">
       <td className="py-3 pr-4 font-mono text-blue-400 font-medium text-sm">
-        {holding.putTarget}
+        {holding.tickerTooltip
+          ? <span title={holding.tickerTooltip} className="cursor-help border-b border-dotted border-blue-400/50">{tickerDisplay}</span>
+          : tickerDisplay
+        }
       </td>
       <td className="py-3 pr-4 font-medium text-sm">{holding.display}</td>
       <td className="py-3 pr-4 text-right">
@@ -179,10 +192,10 @@ function HoldingRow({
         {holding.thesis}
       </td>
       <td className="py-3 pr-4 text-right font-mono text-sm">
-        {quote ? fmtUsd(quote.price) : <Skeleton w="w-16" />}
+        {effectiveQuote ? fmtUsd(effectiveQuote.price) : <Skeleton w="w-16" />}
       </td>
       <td className={`py-3 pr-4 text-right font-mono text-xs ${dayColor}`}>
-        {quote ? fmtPct(quote.changePercent) : <Skeleton />}
+        {effectiveQuote ? fmtPct(effectiveQuote.changePercent) : <Skeleton />}
       </td>
       <td className={`py-3 pr-4 text-right font-mono text-xs ${ytdPct == null ? "" : ytdPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>
         {ytdPct != null ? fmtPct(ytdPct) : <Skeleton />}
@@ -236,7 +249,7 @@ export default function Home() {
   // Basket switch: fetch all holdings, set initial CSP state on first load only
   useEffect(() => {
     const symbols = [...new Set(basket.holdings.map((h) => h.putTarget))];
-    const firstTicker = basket.holdings[0]?.putTarget ?? "";
+    const firstTicker = (basket.holdings.find((h) => !h.noCsp) ?? basket.holdings[0])?.putTarget ?? "";
 
     setHistoryData(null);
     setSupportLevels([]);
@@ -455,7 +468,7 @@ export default function Home() {
                     onChange={(e) => onCspHoldingChange(e.target.value)}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                   >
-                    {basket.holdings.map((h) => (
+                    {basket.holdings.filter((h) => !h.noCsp).map((h) => (
                       <option key={h.putTarget} value={h.putTarget}>
                         {h.putTarget}
                       </option>

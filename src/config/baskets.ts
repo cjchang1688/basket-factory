@@ -9,6 +9,11 @@ export type Holding = {
   role: string;          // Badge: what it actually does
   thesis: string;        // 1-line why it wins
   putTarget: string;     // US ticker with liquid options for CSPs
+  tickerLabel?: string;      // Override display in Ticker column (e.g. "BTC" instead of "BTC-USD")
+  tickerTooltip?: string;    // Tooltip for ticker column (e.g. "Bitcoin/USD Coin Metrics")
+  override52wHigh?: number;  // Override 52W high returned by API
+  override52wLow?: number;   // Override 52W low returned by API
+  noCsp?: boolean;           // Exclude from CSP calculator dropdown (e.g. spot crypto)
 };
 
 export type Basket = {
@@ -156,6 +161,93 @@ export const BASKETS: Record<string, Basket> = {
       { symbol: "DINO", display: "HF Sinclair", weight: 15, role: "Mid-Continent", thesis: "Rocky Mountain + Southwest refining footprint", putTarget: "DINO" },
       { symbol: "PBF", display: "PBF Energy", weight: 15, role: "East Coast", thesis: "East Coast leverage, high beta to cracks", putTarget: "PBF" },
       { symbol: "DK", display: "Delek US", weight: 10, role: "Small Cap", thesis: "Small cap refiner, Permian logistics upside", putTarget: "DK" },
+    ],
+  },
+
+  "ai-racks": {
+    id: "ai-racks",
+    name: "AI Racks",
+    emoji: "🗄️",
+    thesis: "AI inference explodes. Own the rack builders and the switches between them.",
+    thesisLong: "Every LLM deployment needs physical racks of GPUs, cooling, and networking. DELL and SMCI integrate NVDA GB200 clusters. HPE owns enterprise. ANET and CSCO connect them. PSTG stores the weights. Infrastructure wins regardless of which model wins.",
+    scenarioTicker: "DELL",
+    holdings: [
+      { symbol: "DELL", display: "Dell Technologies", weight: 25, role: "Server King", thesis: "#1 server shipper, main NVDA GB200 rack integrator", putTarget: "DELL" },
+      { symbol: "SMCI", display: "Super Micro", weight: 25, role: "Custom Racks", thesis: "Fastest custom liquid-cooled AI rack builder", putTarget: "SMCI" },
+      { symbol: "HPE", display: "Hewlett Packard Ent", weight: 20, role: "Enterprise", thesis: "HPE GreenLake + enterprise AI servers", putTarget: "HPE" },
+      { symbol: "ANET", display: "Arista Networks", weight: 15, role: "Networking", thesis: "Data center switches that connect the racks", putTarget: "ANET" },
+      { symbol: "CSCO", display: "Cisco", weight: 10, role: "Network", thesis: "AI fabric + networking for AI clusters", putTarget: "CSCO" },
+      { symbol: "NTAP", display: "NetApp", weight: 5, role: "Storage", thesis: "All-flash storage for AI workloads, enterprise NAS/SAN", putTarget: "NTAP" },
+    ],
+  },
+
+  "neocloud": {
+    id: "neocloud",
+    name: "Neocloud",
+    emoji: "☁️",
+    thesis: "Hyperscalers can't build fast enough. Neoclouds rent GPU clusters by the hour.",
+    thesisLong: "AI startups need H100/GB200 now — not in 3 years when hyperscaler capacity expands. Neoclouds fill that gap: CoreWeave for pure GPU cloud, OCI for enterprise, Nebius for EU, plus the Bitcoin miners pivoting their power infrastructure to AI compute.",
+    scenarioTicker: "CRWV",
+    holdings: [
+      { symbol: "CRWV", display: "CoreWeave", weight: 25, role: "GPU King", thesis: "Pure-play GPU cloud, largest H100/GB200 fleet for rent", putTarget: "CRWV" },
+      { symbol: "ORCL", display: "Oracle", weight: 20, role: "Enterprise Cloud", thesis: "OCI - massive NVDA buyer, enterprise neocloud", putTarget: "ORCL" },
+      { symbol: "NBIS", display: "Nebius Group", weight: 20, role: "EU Neocloud", thesis: "Ex-Yandex, EU GPU cloud builder", putTarget: "NBIS" },
+      { symbol: "IREN", display: "Iris Energy", weight: 15, role: "BTC + AI", thesis: "Bitcoin miner pivoting to AI cloud", putTarget: "IREN" },
+      { symbol: "APLD", display: "Applied Digital", weight: 10, role: "Data Center", thesis: "Data center REIT for AI/neocloud", putTarget: "APLD" },
+      { symbol: "CLSK", display: "CleanSpark", weight: 10, role: "Infra", thesis: "Power + infra for AI cloud", putTarget: "CLSK" },
+    ],
+  },
+
+  "quantum": {
+    id: "quantum",
+    name: "Quantum",
+    emoji: "⚛️",
+    thesis: "Quantum computing is pre-revenue — own the pure-plays before the breakout.",
+    thesisLong: "Quantum advantage is coming: IonQ, Rigetti, and D-Wave each bet on different physics. QUBT adds photonics. ARQQ plays quantum encryption. High-risk, high-upside basket — size accordingly.",
+    scenarioTicker: "IONQ",
+    holdings: [
+      { symbol: "IONQ", display: "IonQ", weight: 25, role: "Ion Trap Leader", thesis: "Leading trapped-ion quantum, pure-play", putTarget: "IONQ" },
+      { symbol: "RGTI", display: "Rigetti Computing", weight: 20, role: "Superconducting", thesis: "Superconducting quantum processors", putTarget: "RGTI" },
+      { symbol: "QUBT", display: "Quantum Computing Inc", weight: 20, role: "Photonics", thesis: "Photonic quantum + quantum sensing", putTarget: "QUBT" },
+      { symbol: "QBTS", display: "D-Wave Quantum", weight: 15, role: "Annealing", thesis: "Quantum annealing commercial leader", putTarget: "QBTS" },
+      { symbol: "QMCO", display: "Quantum Corp", weight: 10, role: "Storage", thesis: "Quantum-adjacent data storage + legacy", putTarget: "QMCO" },
+      { symbol: "ARQQ", display: "Arqit Quantum", weight: 10, role: "Encryption", thesis: "Quantum encryption / QKD", putTarget: "ARQQ" },
+    ],
+  },
+
+  "crypto": {
+    id: "crypto",
+    name: "Crypto",
+    emoji: "₿",
+    thesis: "Own the picks-and-shovels of crypto: exchanges, treasuries, stablecoin infra — plus spot BTC and ETH.",
+    thesisLong: "Crypto infrastructure wins regardless of which coin wins the cycle. COIN is the regulated exchange. CRCL is stablecoin rails. MSTR and BMNR are leveraged BTC/ETH treasury plays. IBIT gives spot BTC in a wrapper. BTC-USD and ETH-USD anchor with direct coin exposure.",
+    scenarioTicker: "COIN",
+    holdings: [
+      { symbol: "BMNR", display: "BitMine Immersion", weight: 20, role: "ETH Treasury", thesis: "Largest ETH treasury company, Tom Lee chair", putTarget: "BMNR" },
+      { symbol: "COIN", display: "Coinbase", weight: 20, role: "Exchange", thesis: "Largest US crypto exchange, custody + trading fees", putTarget: "COIN" },
+      { symbol: "CRCL", display: "Circle", weight: 15, role: "Stablecoin", thesis: "USDC issuer, stablecoin infra play", putTarget: "CRCL" },
+      { symbol: "IBIT", display: "iShares Bitcoin Trust", weight: 15, role: "BTC ETF", thesis: "BlackRock spot BTC ETF, tracks BTC", putTarget: "IBIT" },
+      { symbol: "MSTR", display: "MicroStrategy / Strategy", weight: 15, role: "BTC Treasury", thesis: "Largest corporate BTC holder, leveraged BTC play", putTarget: "MSTR" },
+      {
+        symbol: "BTC-USD", display: "Bitcoin", weight: 8, role: "Spot BTC",
+        thesis: "Coin Metrics spot BTC price",
+        putTarget: "BTC-USD",
+        tickerLabel: "BTC",
+        tickerTooltip: "Bitcoin/USD Coin Metrics",
+        override52wHigh: 126184.05,
+        override52wLow: 57717.55,
+        noCsp: true,
+      },
+      {
+        symbol: "ETH-USD", display: "Ethereum", weight: 7, role: "Spot ETH",
+        thesis: "Coin Metrics spot ETH price",
+        putTarget: "ETH-USD",
+        tickerLabel: "ETH",
+        tickerTooltip: "Ether/USD Coin Metrics",
+        override52wHigh: 4265.11,
+        override52wLow: 1506.51,
+        noCsp: true,
+      },
     ],
   },
 };
